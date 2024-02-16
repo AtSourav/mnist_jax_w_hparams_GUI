@@ -37,8 +37,9 @@ from jaxtyping import Array, Float      # so we can use these to denote the clas
 
  
 import torch
-from torch.utils.data import Dataloader                     # we'll get the dataset from torch
+from torch.utils.data import DataLoader                     # we'll get the dataset from torch
 
+os.makedirs('/parameters/', exist_ok=True)                  # if the folder already exists, then it does nothing
 open("/parameters/gui_parameters_temp.py", "w")             # gui_parameters_temp.py is the module with the values of the parameters as entered in the gui 
                                                             # rewritten every time new parameters are entered, mnist_main.py reads parameter values from this module
 
