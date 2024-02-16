@@ -37,9 +37,28 @@ from jaxtyping import Array, Float      # so we can use these to denote the clas
 
  
 import torch
-from torch.utils.data import Dataloader         # we'll get the dataset from torch
+from torch.utils.data import Dataloader                     # we'll get the dataset from torch
+
+open("/parameters/gui_parameters_temp.py", "w")             # gui_parameters_temp.py is the module with the values of the parameters as entered in the gui 
+                                                            # rewritten every time new parameters are entered, mnist_main.py reads parameter values from this module
+
 
 
 return_code = subprocess.run(["python", "input_gui.py"])      # capture_output is set to the default value False
+
+from parameters import gui_parameters_temp as ginp
+
+# parameters
+
+model = ginp.model
+batch_size = ginp.batch_size
+lr = ginp.lr
+epochs = ginp.epochs
+key = ginp.key
+
+print(f'The model is {model}')
+print(f'The batch_size is {batch_size}')
+
+
 
 
