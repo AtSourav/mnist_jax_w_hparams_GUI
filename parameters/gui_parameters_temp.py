@@ -1,5 +1,5 @@
-model='none'
-batch_size=32
-lr=0.01
+model='mlp small'
+batch_size=64
+lr=0.001
 epochs=10
 seed=12
