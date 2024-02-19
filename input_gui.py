@@ -7,7 +7,7 @@ l1 = tk.Label(wind, text = 'Model')
 l2 = tk.Label(wind, text = 'Batch size')
 l3 = tk.Label(wind, text = 'Learning rate')
 l4 = tk.Label(wind, text = 'Number of epochs')
-l5 = tk.Label(wind, text = 'Key')
+l5 = tk.Label(wind, text = 'Seed')
 
 
 e1 = tk.Entry(wind)                 # should enter a string here
@@ -41,7 +41,7 @@ def SaveCallback():
         out.write(f"batch_size={e2.get()}\n")
         out.write(f"lr={e3.get()}\n")
         out.write(f"epochs={e4.get()}\n")
-        out.write(f"key={e5.get()}\n")
+        out.write(f"seed={e5.get()}\n")
 
 def close():
     wind.destroy()
