@@ -10,7 +10,7 @@ l4 = tk.Label(wind, text = 'Number of epochs')
 l5 = tk.Label(wind, text = 'Key')
 
 
-e1 = tk.Entry(wind)
+e1 = tk.Entry(wind)                 # should enter a string here
 e2 = tk.Entry(wind)
 e3 = tk.Entry(wind)
 e4 = tk.Entry(wind)
@@ -28,10 +28,14 @@ e3.grid(row=2, column=1)
 e4.grid(row=3, column=1)
 e5.grid(row=4, column=1)
 
-def DoneCallback():
-    os.makedirs('/parameters/', exist_ok=True)                           # if the folder already exists, then it does nothing
+cwd = os.getcwd()
+path_param = os.path.join(cwd,'parameters')
+path_param_module = os.path.join(path_param,'gui_parameters_temp.py')
 
-    with open("/parameters/gui_parameters_temp.py", 'w') as out:         # gui_parameters_temp.py acts as the module with the values of the parameters as entered in the gui 
+
+def SaveCallback():    
+
+    with open(path_param_module, 'w') as out:                            # gui_parameters_temp.py is the module with the values of the parameters as entered in the gui 
                                                                          # rewritten every time new parameters are entered, mnist_main.py reads parameter values from this module
         out.write(f"model={e1.get()}\n")
         out.write(f"batch_size={e2.get()}\n")
@@ -39,9 +43,14 @@ def DoneCallback():
         out.write(f"epochs={e4.get()}\n")
         out.write(f"key={e5.get()}\n")
 
+def close():
+    wind.destroy()
 
-cb = tk.Button(wind, text='Done', command=DoneCallback)                  # button to press Done after entering the parameters
-cb.grid(row=5, column=1)
+
+cb1 = tk.Button(wind, text='Save', command=SaveCallback)                  # button to press after entering the parameters
+cb2 = tk.Button(wind, text='Close', command=close)                        # button to close the window
+cb1.grid(row=5, column=0)
+cb2.grid(row=5, column=1)
 
 wind.mainloop()
 

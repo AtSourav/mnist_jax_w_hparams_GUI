@@ -39,9 +39,12 @@ from jaxtyping import Array, Float      # so we can use these to denote the clas
 import torch
 from torch.utils.data import DataLoader                     # we'll get the dataset from torch
 
-os.makedirs('/parameters/', exist_ok=True)                  # if the folder already exists, then it does nothing
-open("/parameters/gui_parameters_temp.py", "w")             # gui_parameters_temp.py is the module with the values of the parameters as entered in the gui 
-                                                            # rewritten every time new parameters are entered, mnist_main.py reads parameter values from this module
+cwd = os.getcwd()
+path_param = os.path.join(cwd,'parameters') 
+os.makedirs(path_param, exist_ok=True)                              # if the folder already exists, then it does nothing
+                                                                    # it's importtant to give the root path or os.makedirs does not have the required permissions
+open(os.path.join(path_param,'gui_parameters_temp.py'), "w")        # gui_parameters_temp.py is the module with the values of the parameters as entered in the gui 
+                                                                    # rewritten every time new parameters are entered, mnist_main.py reads parameter values from this module
 
 
 

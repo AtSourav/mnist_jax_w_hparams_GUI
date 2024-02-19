@@ -9,3 +9,7 @@ optax==0.1.9
 torch==2.2.0 --index-url https://download.pytorch.org/whl/cpu
 torchvision==0.17.0 --index-url https://download.pytorch.org/whl/cpu
 tensorboard==2.15.1
+
+# install jax cpu version by hand
+# pip install --upgrade pip
+# pip install --upgrade "jax[cpu]"

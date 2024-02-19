@@ -1,3 +1,5 @@
+# use conda env create -f create_env.yml
+
 name: JAX_MNIST
 channels:
   - conda-forge
