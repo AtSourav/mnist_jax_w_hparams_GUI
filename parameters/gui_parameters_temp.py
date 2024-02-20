@@ -1,6 +1,6 @@
 model='mlp small'
-batch_size=64
-lr=0.001
+batch_size=32
+lr=0.005
 epochs=2
-seed=23
+seed=24
 optimizer='adam'

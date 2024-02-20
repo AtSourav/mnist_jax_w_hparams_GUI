@@ -39,4 +39,4 @@ class MLP_small(eqx.Module):
         return x
     
     def describe(self):
-        print(self.descript)
+        print(self.descript+"\n")

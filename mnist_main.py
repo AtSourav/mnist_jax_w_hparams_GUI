@@ -151,7 +151,8 @@ if model_name=='mlp small':
     model = models.MLP_small(subkey)
     model.describe()                          # a short description of the model
     # print(model.__repr__)                   # for a detailed description of the model layers
-    model_type = model.__class__.__name__     # .__class__.__name__ gives us the type of object that model is    
+    model_type = model.__class__.__name__     # .__class__.__name__ gives us the type of object that model is 
+
     
 else:
     raise NotImplementedError(f'The model {model_name} has not been implemented in models.py, check if you got the name right.')
@@ -170,8 +171,8 @@ def cross_entropy(y: Int[Array, "batch"], pred_y: Float[Array, "batch 10"]) -> F
     return -jnp.mean(pred_y)
 
 
-# @eqx.filter_jit      # we don't need to filter out the arrays here as every input is an array
-@jax.jit
+
+@eqx.filter_jit                    # I'd have thought that jax.jit works too since we're not working with anything other than an array, but we get an error saying: Cannot interpret value of type <class 'jaxlib.xla_extension.PjitFunction'> as an abstract array; it does not have a dtype attribute
 def batch_cross_entropy_loss(model:model_type, img_batch:Float[Array, "batch 1 28 28"], labels_batch:Int[Array, "batch"]) -> Float[Array, ""]:
     '''Average cross-entropy loss for a batch of images.'''
     
@@ -179,8 +180,6 @@ def batch_cross_entropy_loss(model:model_type, img_batch:Float[Array, "batch 1 2
 
     pred_prob_batch = jax.vmap(model)(img_batch)
     return cross_entropy(labels_batch, pred_prob_batch)
-
-
 
 
 #-----------------------------------------------------------------------
@@ -196,8 +195,11 @@ def cross_entropy_loss(model:model_type, set:DataLoader):
     accumulated_loss = 0
 
     for images_batch, labels_batch in set:
-        pred_prob_batch = model(images_batch)
-        accumulated_loss += batch_cross_entropy_loss(images_batch,labels_batch)
+        images_batch = images_batch.numpy()
+        labels_batch = labels_batch.numpy()
+
+        pred_prob_batch = jax.vmap(model)(images_batch)
+        accumulated_loss += batch_cross_entropy_loss(model, images_batch,labels_batch)
 
     return accumulated_loss/len(set)   
 
@@ -209,7 +211,10 @@ def classification_accuracy(model:model_type, set:DataLoader):
     accuracy_accumulated = 0 
 
     for images_batch, labels_batch in set:
-        pred_prob_batch = model(images_batch)
+        images_batch = images_batch.numpy()
+        labels_batch = labels_batch.numpy()
+        
+        pred_prob_batch = jax.vmap(model)(images_batch)
         pred_labels_batch = jnp.argmax(pred_prob_batch, axis=1)
         batch_accuracy = jnp.sum(pred_labels_batch==labels_batch)/batch_size
         accuracy_accumulated += batch_accuracy
@@ -224,13 +229,13 @@ def classification_accuracy(model:model_type, set:DataLoader):
 optim = getattr(optax, optimizer_name)(learning_rate=lr)                             # getattr gets the chosen optax optimizer from the optax module
 
 
-@jax.jit                                     
+@eqx.filter_jit                                     
 def make_step(model:model_type, opt_state:PyTree, img_batch: Float[Array, "batch 1 28 28"], labels_batch:Int[Array, "batch"]):
     
     _, grads = eqx.filter_value_and_grad(batch_cross_entropy_loss)(model, img_batch, labels_batch)           # eqx.filter_value_and_grad(f)(x1,x2,...) computes f(x1,x2,...), df/dx1 w.r.t. the array components of x1
                                                                                                              # in this case we don't need to capture the value of the loss
     updates, opt_state = optim.update(grads, opt_state, model) 
-    model = eqx.apply_update(model, updates)
+    model = eqx.apply_updates(model, updates)
 
     return model, opt_state
 
@@ -250,8 +255,9 @@ def train(model:model_type, trainloader: DataLoader, testloader: DataLoader, opt
             labels_batch = labels_batch.numpy()                                                                    # converting torch tensors to numpy arrays
             model, opt_state = make_step(model, opt_state, img_batch, labels_batch)
 
-        print(f"Training loss: {cross_entropy_loss(model,trainloader)}, training accuracy: {classification_accuracy(model,trainloader)}")
-        print(f"Training loss: {cross_entropy_loss(model,testloader)}, training accuracy: {classification_accuracy(model,testloader)}")
+        print(f"After epoch {epoch}: ")
+        print(f"training loss={cross_entropy_loss(model,trainloader)}, training accuracy={classification_accuracy(model,trainloader)}")
+        print(f"test set loss={cross_entropy_loss(model,testloader)}, test set accuracy={classification_accuracy(model,testloader)}\n")
 
     return model
 
@@ -263,13 +269,9 @@ def train(model:model_type, trainloader: DataLoader, testloader: DataLoader, opt
 
 if __name__=="__main__":                      # to prevent the train() step from being executed (as we're calling it below) if this script is imported as a module
     
-    #print("Training with the "+optimizer_name+f" optimizer with a learning rate of {lr} for {epochs} epochs.")
-    #train(model, trainloader, testloader, optim, epochs)
+    print("Training with the "+optimizer_name+f" optimizer with a learning rate of {lr} for {epochs} epochs.\n")
+    train(model, trainloader, testloader, optim, epochs)
 
-    x, y = next(iter(trainloader))
-    loss_temp = batch_cross_entropy_loss(model,x,y)             #there's something wrong with this function, probably with the vmap
-
-    print(loss_temp)
 
 
     # turn everything into a function here, in a python script everything should be a function so things are not automatically evaluated when the script is called as a module (?)
