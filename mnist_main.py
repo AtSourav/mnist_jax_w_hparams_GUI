@@ -147,7 +147,9 @@ key, subkey = jrand.split(key,2)
 
 if model_name=='mlp small':
     model = models.MLP_small(subkey)
+    model_type = model.__class__.__name__     # .__class__.__name__ gives us the type of object that model is    
     print(model.__doc__)                      # work on this bit
+    # print(model.__repr__)                   # for a detailed description of the model layers
 else:
     raise NotImplementedError(f'The model {model_name} has not been implemented in models.py, check if you got the name right.')
 
@@ -155,3 +157,65 @@ else:
 
 #------------------------------------------------------------------------
 # define the loss function
+
+def cross_entropy(y: Int[Array, "batch"], pred_y: Float[Array, "batch 10"]) -> Float[Array, ""]:
+    '''Average cross-entropy for a batch of predictions.'''
+
+    # pred_y for a single image is the log prob of the image belonging to the ten different classes, hence it's a 10d array
+
+    pred_y = jnp.take_along_axis(pred_y, jnp.expand_dims(y,1), axis=1)                  # this takes log of the predicted probability that the image belongs to it's true class 
+    return -jnp.mean(pred_y)
+
+
+# @eqx.filter_jit      # we don't need to filter out the arrays here as every input is an array
+@jax.jit
+def batch_cross_entropy_loss(model:model_type, img_batch:Float[Array, "batch 1 28 28"], labels_batch:Int[Array, "batch"]) -> Float[Array, ""]:
+    '''Average cross-entropy loss for a batch of images.'''
+    
+    # we'll need to use vmap to vectorize the operation across the batch
+
+    pred_prob_batch = jax.vmap(model)(img_batch)
+    return cross_entropy(labels_batch, pred_prob_batch)
+
+
+
+
+#-----------------------------------------------------------------------
+# Evaluation metrics: classification accuracy, loss (across an entire dataset)
+# we cannot jit compile these as these are not pure functions and we are using a for loop that is argument dependent
+
+def cross_entropy_loss(model:model_type, set:DataLoader):              
+    '''
+    Computes the average cross-entropy loss across the entire dataset, train or test.
+    The second argument should be either trainloader or testloader.
+    '''
+
+    accumulated_loss = 0
+
+    for images_batch, labels_batch in set:
+        pred_prob_batch = model(images_batch)
+        accumulated_loss += batch_cross_entropy_loss(images_batch,labels_batch)
+
+    return accumulated_loss/len(set)   
+
+def classification_accuracy(model:model_type, set:DataLoader): 
+    '''
+    Computes the classification accuracy across the entire dataset, train or test.
+    The second argument should be either trainloader or testloader.
+    '''
+    accuracy_accumulated = 0 
+
+    for images_batch, labels_batch in set:
+        pred_prob_batch = model(images_batch)
+        pred_labels_batch = jnp.argmax(pred_prob_batch, axis=1)
+        batch_accuracy = jnp.sum(pred_labels_batch==labels_batch)/batch_size
+        accuracy_accumulated += batch_accuracy
+
+    return accuracy_accumulated/len(set)
+
+
+
+#----------------------------------------------------------------------------------------
+# Training
+
+
