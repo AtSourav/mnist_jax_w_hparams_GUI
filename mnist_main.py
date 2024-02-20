@@ -68,6 +68,7 @@ batch_size = ginp.batch_size
 lr = ginp.lr
 epochs = ginp.epochs
 seed = ginp.seed
+optimizer_name = ginp.optimizer
 
 key = jrand.PRNGKey(seed)
 
@@ -130,6 +131,7 @@ testloader = DataLoader(
         test_set, batch_size=batch_size, shuffle=True
 )
 
+steps_per_epoch = len(trainloader)
 
 # -----------------------------------------------------------------------
 # let's check the shape of the data
@@ -147,9 +149,10 @@ key, subkey = jrand.split(key,2)
 
 if model_name=='mlp small':
     model = models.MLP_small(subkey)
-    model_type = model.__class__.__name__     # .__class__.__name__ gives us the type of object that model is    
-    print(model.__doc__)                      # work on this bit
+    model.describe()                          # a short description of the model
     # print(model.__repr__)                   # for a detailed description of the model layers
+    model_type = model.__class__.__name__     # .__class__.__name__ gives us the type of object that model is    
+    
 else:
     raise NotImplementedError(f'The model {model_name} has not been implemented in models.py, check if you got the name right.')
 
@@ -217,5 +220,61 @@ def classification_accuracy(model:model_type, set:DataLoader):
 
 #----------------------------------------------------------------------------------------
 # Training
+
+optim = getattr(optax, optimizer_name)(learning_rate=lr)                             # getattr gets the chosen optax optimizer from the optax module
+
+
+@jax.jit                                     
+def make_step(model:model_type, opt_state:PyTree, img_batch: Float[Array, "batch 1 28 28"], labels_batch:Int[Array, "batch"]):
+    
+    _, grads = eqx.filter_value_and_grad(batch_cross_entropy_loss)(model, img_batch, labels_batch)           # eqx.filter_value_and_grad(f)(x1,x2,...) computes f(x1,x2,...), df/dx1 w.r.t. the array components of x1
+                                                                                                             # in this case we don't need to capture the value of the loss
+    updates, opt_state = optim.update(grads, opt_state, model) 
+    model = eqx.apply_update(model, updates)
+
+    return model, opt_state
+
+
+def infinite_trainloader():                                     # to loop over the training dataset any number of times
+    while True:
+        yield from trainloader                                  # gives a generator object that has to be iterated to get the values (the different batches in this case)
+
+
+def train(model:model_type, trainloader: DataLoader, testloader: DataLoader, optim: optax.GradientTransformation, epochs:Int) -> model_type :
+    
+    opt_state = optim.init(eqx.filter(model, eqx.is_array))                     # filtering out the array components of the model coz we can only train those
+
+    for epoch in range(epochs):
+        for step, (img_batch, labels_batch) in zip(range(steps_per_epoch), infinite_trainloader()):                # zip() takes iterables, aggregates them in a tuple and returns that
+            img_batch = img_batch.numpy()
+            labels_batch = labels_batch.numpy()                                                                    # converting torch tensors to numpy arrays
+            model, opt_state = make_step(model, opt_state, img_batch, labels_batch)
+
+        print(f"Training loss: {cross_entropy_loss(model,trainloader)}, training accuracy: {classification_accuracy(model,trainloader)}")
+        print(f"Training loss: {cross_entropy_loss(model,testloader)}, training accuracy: {classification_accuracy(model,testloader)}")
+
+    return model
+
+
+
+
+#---------------------------------------------------------------------------------------
+# Running the training from the terminal
+
+if __name__=="__main__":                      # to prevent the train() step from being executed (as we're calling it below) if this script is imported as a module
+    
+    #print("Training with the "+optimizer_name+f" optimizer with a learning rate of {lr} for {epochs} epochs.")
+    #train(model, trainloader, testloader, optim, epochs)
+
+    x, y = next(iter(trainloader))
+    loss_temp = batch_cross_entropy_loss(model,x,y)             #there's something wrong with this function, probably with the vmap
+
+    print(loss_temp)
+
+
+    # turn everything into a function here, in a python script everything should be a function so things are not automatically evaluated when the script is called as a module (?)
+            
+
+
 
 
