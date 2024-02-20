@@ -147,7 +147,7 @@ key, subkey = jrand.split(key,2)
 
 if model_name=='mlp small':
     model = models.MLP_small(subkey)
-    print(help(model))                      # work on this bit
+    print(model.__doc__)                      # work on this bit
 else:
     raise NotImplementedError(f'The model {model_name} has not been implemented in models.py, check if you got the name right.')
 

@@ -7,11 +7,14 @@ from jaxtyping import Array, Float, Int, PyTree
 
 
 class MLP_small(eqx.Module):
+    '''
+    This model is a small mlp with three fully connected layers.
+    '''
+    
     layers: list                  # denotes that the layers are provided as a list
+                                  # syntax in eqx: necessary to specify all fields at the class level, allows it to output a PyTree
 
-    """
-        This model is a small mlp with three fully connected layers.
-    """
+    
 
     def __init__(self, key):
         
