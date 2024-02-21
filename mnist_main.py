@@ -99,7 +99,7 @@ def enter_hyperparameters():      # an array output of mixed type
 #-----------------------------------------------------------
 # dataset loading
 
-def dataload(batch_size: Int[Array, ""]):       # output is a tuple of DataLoader objects
+def dataload(batch_size: Int[Array, ""]):       # output is a array of datasets and DataLoader objects
 
     normalise_data = torchvision.transforms.Compose(
             [
@@ -130,7 +130,18 @@ def dataload(batch_size: Int[Array, ""]):       # output is a tuple of DataLoade
             test_set, batch_size=batch_size, shuffle=True
     )
 
-    return trainloader, testloader
+    trainloader_entire = DataLoader(
+            train_set, batch_size=len(train_set), shuffle=True
+    )
+
+    testloader_entire = DataLoader(
+            test_set, batch_size=len(test_set), shuffle=True
+    )
+
+    return [trainloader_entire, testloader_entire, trainloader, testloader]
+
+#t= dataload(64)
+#print(t[0].size)
 
 
 
@@ -165,7 +176,7 @@ def import_model(model_name, key: Int[Array, "2"]):
 
 
 #------------------------------------------------------------------------
-# define the loss function
+# define the loss function and accuracy
 
 def cross_entropy(y: Int[Array, "batch"], pred_y: Float[Array, "batch 10"]) -> Float[Array, ""]:
     '''Average cross-entropy for a batch of predictions.'''
@@ -179,7 +190,9 @@ def cross_entropy(y: Int[Array, "batch"], pred_y: Float[Array, "batch 10"]) -> F
 
 @eqx.filter_jit                    # I'd have thought that jax.jit works too since we're not working with anything other than an array, but we get an error saying: Cannot interpret value of type <class 'jaxlib.xla_extension.PjitFunction'> as an abstract array; it does not have a dtype attribute
 def batch_cross_entropy_loss(model, img_batch:Float[Array, "batch 1 28 28"], labels_batch:Int[Array, "batch"]) -> Float[Array, ""]:
-    '''Average cross-entropy loss for a batch of images.'''
+    '''
+    Average cross-entropy loss for a batch of images.
+    '''
     
     # we're not specifying the object type of the input variable 'model' as that is dependent on which model we choose to use
     # we'll need to use vmap to vectorize the operation across the batch
@@ -188,9 +201,40 @@ def batch_cross_entropy_loss(model, img_batch:Float[Array, "batch 1 28 28"], lab
     return cross_entropy(labels_batch, pred_prob_batch)
 
 
+@eqx.filter_jit
+def batch_classification_accuracy(model, img_batch:Float[Array, "batch 1 28 28"], labels_batch:Int[Array, "batch"]) -> Float[Array, ""]:
+    '''
+    Computes the classification accuracy for a batch of images.
+    '''
+
+    pred_prob = jax.vmap(model)(img_batch)
+    pred_labels = jnp.argmax(pred_prob, axis=1)
+    accuracy = jnp.sum(pred_labels==labels_batch)/len(labels_batch)
+
+    return accuracy
+
+
 #-----------------------------------------------------------------------
 # Evaluation metrics: classification accuracy, loss (across an entire dataset)
 # we cannot jit compile these as these are not pure functions and we are using a for loop that is argument dependent
+
+@eqx.filter_jit
+def dataset_cross_entropy_loss(model, set:DataLoader):
+    '''
+    Computes the average cross-entropy loss across the entire dataset, train or test.
+    The second argument should be either trainloader or testloader.
+    '''
+
+    images, labels = yield from set
+
+    images = images.numpy()
+    labels = labels.numpy()
+
+    loss = batch_cross_entropy_loss(model, images,labels)
+
+    return loss
+
+
 
 def cross_entropy_loss(model, set:DataLoader):              
     '''
@@ -204,10 +248,28 @@ def cross_entropy_loss(model, set:DataLoader):
         images_batch = images_batch.numpy()
         labels_batch = labels_batch.numpy()
 
-        pred_prob_batch = jax.vmap(model)(images_batch)
         accumulated_loss += batch_cross_entropy_loss(model, images_batch,labels_batch)
 
     return accumulated_loss/len(set)   
+
+@eqx.filter_jit
+def dataset_classification_accuracy(model, set:DataLoader):
+    '''
+    Computes the classification accuracy across the entire dataset, train or test.
+    The second argument should be either trainloader or testloader.
+    '''
+
+    images, labels = yield from set
+
+    images = images.numpy()
+    labels = labels.numpy()
+
+    pred_prob = jax.vmap(model)(images)
+    pred_labels = jnp.argmax(pred_prob, axis=1)
+    accuracy = jnp.sum(pred_labels==labels)/len(labels)
+
+    return accuracy
+
 
 def classification_accuracy(model, set:DataLoader): 
     '''
@@ -244,26 +306,35 @@ def make_step(optim: optax.GradientTransformation, model, opt_state:PyTree, img_
     return model, opt_state
 
 
-def infinite_trainloader(trainloader):                                     # to loop over the training dataset any number of times
+def infinite_dataloader(dataloader):                                     # to loop over the training dataset any number of times
     while True:
-        yield from trainloader                                  # gives a generator object that has to be iterated to get the values (the different batches in this case)
+        yield from dataloader                                  # gives a generator object that has to be iterated to get the values (the different batches in this case)
 
 
-def train(model, trainloader: DataLoader, testloader: DataLoader, optim: optax.GradientTransformation, epochs:Int):
+def train(model, trainloader_entire:DataLoader, testloader_entire:DataLoader, trainloader: DataLoader, testloader: DataLoader, optim: optax.GradientTransformation, epochs:Int):
     
     opt_state = optim.init(eqx.filter(model, eqx.is_array))                     # filtering out the array components of the model coz we can only train those
 
     steps_per_epoch = len(trainloader)
 
     for epoch in range(epochs):
-        for step, (img_batch, labels_batch) in zip(range(steps_per_epoch), infinite_trainloader(trainloader)):                # zip() takes iterables, aggregates them in a tuple and returns that
+        for step, (img_batch, labels_batch) in zip(range(steps_per_epoch), infinite_dataloader(trainloader)):                # zip() takes iterables, aggregates them in a tuple and returns that
             img_batch = img_batch.numpy()
             labels_batch = labels_batch.numpy()                                                                    # converting torch tensors to numpy arrays
             model, opt_state = make_step(optim, model, opt_state, img_batch, labels_batch)
 
+        img_train_all, labels_train_all = next(iter(trainloader_entire))            # not using the infinite dataloader here coz it gives a generator object and we're not iterating through batches here
+        img_test_all, labels_test_all = next(iter(testloader_entire))
+
+        img_train_all = img_train_all.numpy()
+        img_test_all = img_test_all.numpy()
+        labels_train_all = labels_train_all.numpy()
+        labels_test_all = labels_test_all.numpy()
+
+
         print(f"After epoch {epoch}: ")
-        print(f"training loss={cross_entropy_loss(model,trainloader)}, training accuracy={classification_accuracy(model,trainloader)}")
-        print(f"test set loss={cross_entropy_loss(model,testloader)}, test set accuracy={classification_accuracy(model,testloader)}\n")
+        print(f"training loss={batch_cross_entropy_loss(model,img_train_all, labels_train_all)}, training accuracy={batch_classification_accuracy(model,img_train_all, labels_train_all)}")
+        print(f"test set loss={batch_cross_entropy_loss(model,img_test_all, labels_test_all)}, test set accuracy={batch_classification_accuracy(model,img_test_all, labels_test_all)}\n")
 
     return model
 
@@ -283,9 +354,11 @@ def run():
 
     key = jrand.PRNGKey(seed)
 
-    dataloaders = dataload(batch_size)
-    trainloader = dataloaders[0]
-    testloader = dataloaders[1]
+    data = dataload(batch_size)
+    trainloader_entire  = data[0]
+    testloader_entire = data[1]
+    trainloader = data[2]
+    testloader = data[3]
 
     model = import_model(model_name, key)
 
@@ -293,7 +366,7 @@ def run():
 
     print("Training with the "+optimizer_name+f" optimizer with a learning rate of {lr} for {epochs} epochs.\n")
 
-    train(model, trainloader, testloader, optim, epochs)
+    train(model, trainloader_entire, testloader_entire, trainloader, testloader, optim, epochs)
 
 
 
