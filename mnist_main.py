@@ -45,32 +45,29 @@ from torch.utils.data import DataLoader              # we'll get the dataset fro
 #-------------------------------------------------------------
 # process to retrieve hyperparameters entered throught the gui
 
-cwd = os.getcwd()
-path_param = os.path.join(cwd,'parameters') 
-os.makedirs(path_param, exist_ok=True)                              # if the folder already exists, then it does nothing
-                                                                    # it's importtant to give the root path or os.makedirs does not have the required permissions
-open(os.path.join(path_param,'gui_parameters_temp.py'), "w")        # gui_parameters_temp.py is the module with the values of the parameters as entered in the gui 
-                                                                    # rewritten every time new parameters are entered, mnist_main.py reads parameter values from this module
+def enter_hyperparameters():      # an array output of mixed type
+
+    cwd = os.getcwd()
+    path_param = os.path.join(cwd,'parameters') 
+    os.makedirs(path_param, exist_ok=True)                              # if the folder already exists, then it does nothing
+                                                                        # it's importtant to give the root path or os.makedirs does not have the required permissions
+    open(os.path.join(path_param,'gui_parameters_temp.py'), "w")        # gui_parameters_temp.py is the module with the values of the parameters as entered in the gui 
+                                                                        # rewritten every time new parameters are entered, mnist_main.py reads parameter values from this module
 
 
 
-return_code = subprocess.run(["python", "input_gui.py"])            # capture_output is set to the default value False
+    return_code = subprocess.run(["python", "input_gui.py"])            # capture_output is set to the default value False
 
-from parameters import gui_parameters_temp as ginp
+    from parameters import gui_parameters_temp as ginp
 
+    model_name = ginp.model
+    batch_size = ginp.batch_size
+    lr = ginp.lr
+    epochs = ginp.epochs
+    seed = ginp.seed
+    optimizer_name = ginp.optimizer
 
-
-#------------------------------------------------------------
-# parameters
-
-model_name = ginp.model
-batch_size = ginp.batch_size
-lr = ginp.lr
-epochs = ginp.epochs
-seed = ginp.seed
-optimizer_name = ginp.optimizer
-
-key = jrand.PRNGKey(seed)
+    return [model_name, batch_size, lr, epochs, seed, optimizer_name]
 
 
 
@@ -102,39 +99,43 @@ key = jrand.PRNGKey(seed)
 #-----------------------------------------------------------
 # dataset loading
 
-normalise_data = torchvision.transforms.Compose(
-        [
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Normalize((0.5,),(0.5,))            # mean and std for normalisation are both set to 0.5 for all axes
-        ]
-)
+def dataload(batch_size: Int[Array, ""]):       # output is a tuple of DataLoader objects
 
-train_set = torchvision.datasets.MNIST(
-        "MNIST",
-        train=True,
-        download=True,
-        transform=normalise_data,
-)
+    normalise_data = torchvision.transforms.Compose(
+            [
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize((0.5,),(0.5,))            # mean and std for normalisation are both set to 0.5 for all axes
+            ]
+    )
 
-test_set = torchvision.datasets.MNIST(
-        "MNIST",
-        train=False,
-        download=True,
-        transform=normalise_data,
-)
+    train_set = torchvision.datasets.MNIST(
+            "MNIST",
+            train=True,
+            download=True,
+            transform=normalise_data,
+    )
 
-trainloader = DataLoader(
-        train_set, batch_size=batch_size, shuffle=True
-)
+    test_set = torchvision.datasets.MNIST(
+            "MNIST",
+            train=False,
+            download=True,
+            transform=normalise_data,
+    )
 
-testloader = DataLoader(
-        test_set, batch_size=batch_size, shuffle=True
-)
+    trainloader = DataLoader(
+            train_set, batch_size=batch_size, shuffle=True
+    )
 
-steps_per_epoch = len(trainloader)
+    testloader = DataLoader(
+            test_set, batch_size=batch_size, shuffle=True
+    )
+
+    return trainloader, testloader
+
+
 
 # -----------------------------------------------------------------------
-# let's check the shape of the data
+# we can check the shape of the data as follows
 
 # x, y = next(iter(trainloader))
 # print(x.size())
@@ -143,19 +144,23 @@ steps_per_epoch = len(trainloader)
 
 
 # -----------------------------------------------------------------------
-# the model, we'll import this from a different module where we define the models
+# importing the model, we'll import this from a different module where we define the models
 
-key, subkey = jrand.split(key,2)
+def import_model(model_name, key: Int[Array, "2"]):
 
-if model_name=='mlp small':
-    model = models.MLP_small(subkey)
-    model.describe()                          # a short description of the model
-    # print(model.__repr__)                   # for a detailed description of the model layers
-    model_type = model.__class__.__name__     # .__class__.__name__ gives us the type of object that model is 
+    key, subkey = jrand.split(key,2)
 
-    
-else:
-    raise NotImplementedError(f'The model {model_name} has not been implemented in models.py, check if you got the name right.')
+    if model_name=='mlp small':
+        model = models.MLP_small(subkey)
+        model.describe()                          # a short description of the model
+        # print(model.__repr__)                   # for a detailed description of the model layers
+        # model_type = model.__class__.__name__     # .__class__.__name__ gives us the type of object that model is 
+
+        return model
+
+        
+    else:
+        raise NotImplementedError(f'The model {model_name} has not been implemented in models.py, check if you got the name right.')
 
 
 
@@ -173,9 +178,10 @@ def cross_entropy(y: Int[Array, "batch"], pred_y: Float[Array, "batch 10"]) -> F
 
 
 @eqx.filter_jit                    # I'd have thought that jax.jit works too since we're not working with anything other than an array, but we get an error saying: Cannot interpret value of type <class 'jaxlib.xla_extension.PjitFunction'> as an abstract array; it does not have a dtype attribute
-def batch_cross_entropy_loss(model:model_type, img_batch:Float[Array, "batch 1 28 28"], labels_batch:Int[Array, "batch"]) -> Float[Array, ""]:
+def batch_cross_entropy_loss(model, img_batch:Float[Array, "batch 1 28 28"], labels_batch:Int[Array, "batch"]) -> Float[Array, ""]:
     '''Average cross-entropy loss for a batch of images.'''
     
+    # we're not specifying the object type of the input variable 'model' as that is dependent on which model we choose to use
     # we'll need to use vmap to vectorize the operation across the batch
 
     pred_prob_batch = jax.vmap(model)(img_batch)
@@ -186,7 +192,7 @@ def batch_cross_entropy_loss(model:model_type, img_batch:Float[Array, "batch 1 2
 # Evaluation metrics: classification accuracy, loss (across an entire dataset)
 # we cannot jit compile these as these are not pure functions and we are using a for loop that is argument dependent
 
-def cross_entropy_loss(model:model_type, set:DataLoader):              
+def cross_entropy_loss(model, set:DataLoader):              
     '''
     Computes the average cross-entropy loss across the entire dataset, train or test.
     The second argument should be either trainloader or testloader.
@@ -203,7 +209,7 @@ def cross_entropy_loss(model:model_type, set:DataLoader):
 
     return accumulated_loss/len(set)   
 
-def classification_accuracy(model:model_type, set:DataLoader): 
+def classification_accuracy(model, set:DataLoader): 
     '''
     Computes the classification accuracy across the entire dataset, train or test.
     The second argument should be either trainloader or testloader.
@@ -216,7 +222,7 @@ def classification_accuracy(model:model_type, set:DataLoader):
         
         pred_prob_batch = jax.vmap(model)(images_batch)
         pred_labels_batch = jnp.argmax(pred_prob_batch, axis=1)
-        batch_accuracy = jnp.sum(pred_labels_batch==labels_batch)/batch_size
+        batch_accuracy = jnp.sum(pred_labels_batch==labels_batch)/len(labels_batch)
         accuracy_accumulated += batch_accuracy
 
     return accuracy_accumulated/len(set)
@@ -226,11 +232,9 @@ def classification_accuracy(model:model_type, set:DataLoader):
 #----------------------------------------------------------------------------------------
 # Training
 
-optim = getattr(optax, optimizer_name)(learning_rate=lr)                             # getattr gets the chosen optax optimizer from the optax module
-
 
 @eqx.filter_jit                                     
-def make_step(model:model_type, opt_state:PyTree, img_batch: Float[Array, "batch 1 28 28"], labels_batch:Int[Array, "batch"]):
+def make_step(optim: optax.GradientTransformation, model, opt_state:PyTree, img_batch: Float[Array, "batch 1 28 28"], labels_batch:Int[Array, "batch"]):
     
     _, grads = eqx.filter_value_and_grad(batch_cross_entropy_loss)(model, img_batch, labels_batch)           # eqx.filter_value_and_grad(f)(x1,x2,...) computes f(x1,x2,...), df/dx1 w.r.t. the array components of x1
                                                                                                              # in this case we don't need to capture the value of the loss
@@ -240,20 +244,22 @@ def make_step(model:model_type, opt_state:PyTree, img_batch: Float[Array, "batch
     return model, opt_state
 
 
-def infinite_trainloader():                                     # to loop over the training dataset any number of times
+def infinite_trainloader(trainloader):                                     # to loop over the training dataset any number of times
     while True:
         yield from trainloader                                  # gives a generator object that has to be iterated to get the values (the different batches in this case)
 
 
-def train(model:model_type, trainloader: DataLoader, testloader: DataLoader, optim: optax.GradientTransformation, epochs:Int) -> model_type :
+def train(model, trainloader: DataLoader, testloader: DataLoader, optim: optax.GradientTransformation, epochs:Int):
     
     opt_state = optim.init(eqx.filter(model, eqx.is_array))                     # filtering out the array components of the model coz we can only train those
 
+    steps_per_epoch = len(trainloader)
+
     for epoch in range(epochs):
-        for step, (img_batch, labels_batch) in zip(range(steps_per_epoch), infinite_trainloader()):                # zip() takes iterables, aggregates them in a tuple and returns that
+        for step, (img_batch, labels_batch) in zip(range(steps_per_epoch), infinite_trainloader(trainloader)):                # zip() takes iterables, aggregates them in a tuple and returns that
             img_batch = img_batch.numpy()
             labels_batch = labels_batch.numpy()                                                                    # converting torch tensors to numpy arrays
-            model, opt_state = make_step(model, opt_state, img_batch, labels_batch)
+            model, opt_state = make_step(optim, model, opt_state, img_batch, labels_batch)
 
         print(f"After epoch {epoch}: ")
         print(f"training loss={cross_entropy_loss(model,trainloader)}, training accuracy={classification_accuracy(model,trainloader)}")
@@ -262,21 +268,46 @@ def train(model:model_type, trainloader: DataLoader, testloader: DataLoader, opt
     return model
 
 
+#--------------------------------------------------------------------------------------
+# Main run function
+
+def run():
+
+    params = enter_hyperparameters()
+    model_name = params[0]
+    batch_size = params[1]
+    lr = params[2]
+    epochs = params[3]
+    seed = params[4]
+    optimizer_name = params[5]
+
+    key = jrand.PRNGKey(seed)
+
+    dataloaders = dataload(batch_size)
+    trainloader = dataloaders[0]
+    testloader = dataloaders[1]
+
+    model = import_model(model_name, key)
+
+    optim = getattr(optax, optimizer_name)(learning_rate=lr)                             # getattr gets the chosen optax optimizer from the optax module
+
+    print("Training with the "+optimizer_name+f" optimizer with a learning rate of {lr} for {epochs} epochs.\n")
+
+    train(model, trainloader, testloader, optim, epochs)
+
+
 
 
 #---------------------------------------------------------------------------------------
 # Running the training from the terminal
 
-if __name__=="__main__":                      # to prevent the train() step from being executed (as we're calling it below) if this script is imported as a module
+if __name__=="__main__":                      # to prevent the run() command from being executed (as we're calling it below) if this script is imported as a module
     
-    print("Training with the "+optimizer_name+f" optimizer with a learning rate of {lr} for {epochs} epochs.\n")
-    train(model, trainloader, testloader, optim, epochs)
+    run()
 
 
 
-    # turn everything into a function here, in a python script everything should be a function so things are not automatically evaluated when the script is called as a module (?)
-            
-
+   
 
 
 
