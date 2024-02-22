@@ -11,7 +11,7 @@ l5 = tk.Label(wind, text = 'Seed')
 l6 = tk.Label(wind, text = 'Optimizer')
 
 
-e1 = tk.Entry(wind)                 # should enter a string here
+e1 = tk.Entry(wind)                 # should enter a string with no spaces here
 e2 = tk.Entry(wind)
 e3 = tk.Entry(wind)
 e4 = tk.Entry(wind)

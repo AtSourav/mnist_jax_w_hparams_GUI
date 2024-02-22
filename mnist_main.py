@@ -41,12 +41,14 @@ import torchvision
 from jaxtyping import Array, Float, Int, PyTree      # so we can use these to denote the classes directly instead of having to type jnp.array
 from torch.utils.data import DataLoader              # we'll get the dataset from torch
 
+from SummaryWriter_mod import SummaryWriter_mod   
+
 
 
 #-------------------------------------------------------------
-# process to retrieve hyperparameters entered throught the gui
+# process to retrieve parameters entered throught the gui
 
-def enter_hyperparameters():      # an array output of mixed type
+def enter_parameters():      # an array output of mixed type
 
     cwd = os.getcwd()
     path_param = os.path.join(cwd,'parameters') 
@@ -68,14 +70,16 @@ def enter_hyperparameters():      # an array output of mixed type
     seed = ginp.seed
     optimizer_name = ginp.optimizer
 
-    return [model_name, batch_size, lr, epochs, seed, optimizer_name]
+    parameters_dict = {'model name':model_name, 'batch size':batch_size, 'learning rate':lr, 'number of epochs':epochs, 'seed':seed, 'optimizer':optimizer_name}
+
+    return parameters_dict
 
 
 
 #-----------------------------------------------------------
-# alternate methods of entering hyperparameters:
+# alternate methods of entering parameters:
 
-# we could, for example, have a file called hyperparameters.py in the parameters directory where we enter the hyperparameters by hand
+# we could, for example, have a file called parameters.py in the parameters directory where we enter the parameters by hand
 # then we could pass the file name as an argument from the terminal. we'd have to have the following in this script.
 
 # import sys
@@ -87,7 +91,7 @@ def enter_hyperparameters():      # an array output of mixed type
 #       ...
 
 
-# we could also directly enter the hyperparameters in the terminal and read them off using sys.argv as follows
+# we could also directly enter the parameters in the terminal and read them off using sys.argv as follows
 # this script would need to have the following:
 
 # import sys
@@ -162,7 +166,7 @@ def import_model(model_name: str, key: Int[Array, "2"]) -> eqx.Module:
 
     key, subkey = jrand.split(key,2)
 
-    if model_name=='mlp small':
+    if model_name=='mlp_small':
         model = models.MLP_small(subkey)
         model.describe()                          # a short description of the model
         # print(model.__repr__)                   # for a detailed description of the model layers
@@ -235,11 +239,24 @@ def infinite_dataloader(dataloader: DataLoader):                                
         yield from dataloader                                  # gives a generator object that has to be iterated to get the values (the different batches in this case)
 
 
-def train(model:eqx.Module, trainloader_entire:DataLoader, testloader_entire:DataLoader, trainloader: DataLoader, testloader: DataLoader, optim: optax.GradientTransformation, epochs:Int) -> eqx.Module:
+def train(model:eqx.Module, writer:SummaryWriter_mod, hparams_dict: dict, trainloader_entire:DataLoader, testloader_entire:DataLoader, trainloader: DataLoader, testloader: DataLoader, optim: optax.GradientTransformation, epochs:Int) -> eqx.Module:
     
     opt_state = optim.init(eqx.filter(model, eqx.is_array))                     # filtering out the array components of the model coz we can only train those
 
     steps_per_epoch = len(trainloader)
+
+    img_train_all, labels_train_all = next(iter(trainloader_entire))            # using the infinite_dataloader function gives ValueError: too many values to unpack(expected 2)
+    img_test_all, labels_test_all = next(iter(testloader_entire))               # some incompatibility with the generator object produced by yield I suppose
+
+    img_train_all = img_train_all.numpy()
+    img_test_all = img_test_all.numpy()
+    labels_train_all = labels_train_all.numpy()
+    labels_test_all = labels_test_all.numpy()
+
+    train_loss_list = []
+    test_loss_list = []
+    train_acc_list = []
+    test_acc_list = []
 
     for epoch in range(epochs):
         pbar = tqdm(total=steps_per_epoch, desc=f'Epoch {epoch+1}. Steps')
@@ -249,22 +266,25 @@ def train(model:eqx.Module, trainloader_entire:DataLoader, testloader_entire:Dat
             labels_batch = labels_batch.numpy()                                                                    # converting torch tensors to numpy arrays
             model, opt_state = make_step(optim, model, opt_state, img_batch, labels_batch)
 
+            train_loss = batch_cross_entropy_loss(model,img_train_all, labels_train_all)                           # is it better to use the vectorized function or better to do this in a loop over the batches when calculating for the entire dataset?
+            test_loss = batch_cross_entropy_loss(model,img_test_all, labels_test_all)
+            train_acc = batch_classification_accuracy(model,img_train_all, labels_train_all)
+            test_acc = batch_classification_accuracy(model,img_test_all, labels_test_all)
+
+            train_loss_list.append(train_loss.item())
+            test_loss_list.append(test_loss.item())
+            train_acc_list.append(train_acc.item())
+            test_acc_list.append(test_acc.item())
+
+
             pbar.update()
-        #pbar.refresh()
-        #pbar.reset()                        # pbar needs formatting
+        pbar.close()
+        
+        print(f"training loss={train_loss}, training accuracy={train_acc}")
+        print(f"test set loss={test_loss}, test set accuracy={test_acc}\n")
 
-        img_train_all, labels_train_all = next(iter(trainloader_entire))            # using the infinite_dataloader function gives ValueError: too many values to unpack(expected 2)
-        img_test_all, labels_test_all = next(iter(testloader_entire))               # some incompatibility with the generator object produced by yield I suppose
-
-        img_train_all = img_train_all.numpy()
-        img_test_all = img_test_all.numpy()
-        labels_train_all = labels_train_all.numpy()
-        labels_test_all = labels_test_all.numpy()
-
-
-        # print(f"After epoch {epoch}: ")
-        print(f"training loss={batch_cross_entropy_loss(model,img_train_all, labels_train_all)}, training accuracy={batch_classification_accuracy(model,img_train_all, labels_train_all)}")
-        print(f"test set loss={batch_cross_entropy_loss(model,img_test_all, labels_test_all)}, test set accuracy={batch_classification_accuracy(model,img_test_all, labels_test_all)}\n")
+    metric_dict = {'train loss':train_loss_list, 'test loss':test_loss_list, 'train acc':train_acc_list, 'test acc':test_acc_list}    
+    writer.add_hparams_plot(hparams_dict, metric_dict)
 
     return model
 
@@ -274,7 +294,11 @@ def train(model:eqx.Module, trainloader_entire:DataLoader, testloader_entire:Dat
 
 def run():
 
-    params = enter_hyperparameters()
+    params_dict = enter_parameters()
+    hparams_dict = {key: params_dict[key] for key in params_dict.keys() & {'batch size', 'learning rate', 'number of epochs', 'seed', 'optimizer'}}
+    # hparams_dict is a subset of the params_dict with all the parameters other than model name. W'll assign different models to different folders.
+
+    params = list(params_dict.values())
     model_name = params[0]
     batch_size = params[1]
     lr = params[2]
@@ -296,7 +320,16 @@ def run():
 
     print("Training with the "+optimizer_name+f" optimizer with a learning rate of {lr} for {epochs} epochs.\n")
 
-    train(model, trainloader_entire, testloader_entire, trainloader, testloader, optim, epochs)
+    cwd = os.getcwd()
+    results_path = os.path.join(cwd,'results/'+ model_name)
+    os.makedirs(results_path, exist_ok=True)
+
+    writer = SummaryWriter_mod(log_dir=results_path)
+
+    train(model, writer, hparams_dict, trainloader_entire, testloader_entire, trainloader, testloader, optim, epochs)
+
+    writer.flush()
+    writer.close()
 
     return model
 
