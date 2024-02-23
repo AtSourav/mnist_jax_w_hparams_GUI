@@ -27,4 +27,11 @@ small description of the model. Then add this model_name: model_class pair key:v
 
 For now let's say we want to train the model named 'mlp_small'.
 
-**To train**: you simply run `python mnist_main.py` from within the correct conda env. 
+**To train**: you simply run `python mnist_main.py` from within the correct conda env. This will open a GUI for entering hyperparameters. 
+
+**Entering hyperparameters**: The GUI is based on tkinter and is implemented in input_gui.py. The box will have six fields, it's self-explanatory and the values to enter are the model name (as a string), batch size, learning rate, number of epochs to train, seed, and the optimizer name (as a string, like 'adam'). You should use one of the optimizers that are implemented in the Optax library. Then you press Save and then press Done. The hyperparameter values are written into parameters/gui_parameters_temp.py (temporarily, until they're overwritten) from where they are read off by the main script. This should start the training process and you should see a progress bar (implemented through tkdm) denoting progress through the steps for each epoch. At the end of the each epoch the training loss, training accuracy, test loss, and test accuracy will be displayed. 
+
+**Results**: The results should be viewed through TensorBoard. The logdir into which the SummaryWriter logs the data is results/model_name. So for mlp_small it's results/mlp_small. To get the link to the interface enter
+```tensorboard --logdir results/mlp_small```. Follow the link to open the interface. Go to the HPARAMS tab and you'll see a list of runs with different hyperparameters. Click on the desired one to view the training plots of training loss, training accuracy, test loss, and test accuracy. 
+
+This feature is not offered by default through the SummaryWriter class of PyTorch tensorboard. But I have subclassed it in SummaryWriter_mod.py and then added a function called add_hparams_plot that allows me to offer this visualization. 
