@@ -1,1 +1,1 @@
-The JAX implementation of the dataloading and training process, and the model implementation using Equinox is largely based on these tutorials [1](https://docs.kidger.site/equinox/all-of-equinox/), [2](https://docs.kidger.site/equinox/examples/mnist/)
+The JAX implementation of the dataloading and training process, and the model implementation using Equinox is largely based on these tutorials [1](https://docs.kidger.site/equinox/all-of-equinox/), [2](https://docs.kidger.site/equinox/examples/mnist/).
