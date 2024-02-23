@@ -5,6 +5,19 @@ import jax.random as jrand
 
 from jaxtyping import Array, Float, Int, PyTree
 
+def model_names_dict(key, model_name):
+    '''
+    Returns an instance of the chosen model with the specified key.
+    ''' 
+    dict = {
+            'mlp_small': MLP_small(key)
+        }                                       # add more here
+    
+    if model_name in dict:
+        return dict[model_name]                        
+    else:
+        raise NotImplementedError(f'The model {model_name} has not been implemented in models.py, check if you got the name right.')
+
 
 class MLP_small(eqx.Module):
     '''

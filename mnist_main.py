@@ -33,12 +33,13 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.random as jrand
-import models
+
 import optax
 import torch
 import torchvision
 
 from jaxtyping import Array, Float, Int, PyTree      # so we can use these to denote the classes directly instead of having to type jnp.array
+from models import *
 from torch.utils.data import DataLoader              # we'll get the dataset from torch
 
 from SummaryWriter_mod import SummaryWriter_mod   
@@ -166,17 +167,15 @@ def import_model(model_name: str, key: Int[Array, "2"]) -> eqx.Module:
 
     key, subkey = jrand.split(key,2)
 
-    if model_name=='mlp_small':
-        model = models.MLP_small(subkey)
-        model.describe()                          # a short description of the model
+    model = model_names_dict(subkey, model_name)
+    if hasattr(model, 'descript'):
+        print("\n"+model.descript+"\n")
+        # model.describe()                          # a short description of the model
         # print(model.__repr__)                   # for a detailed description of the model layers
         # model_type = model.__class__.__name__     # .__class__.__name__ gives us the type of object that model is 
 
-        return model
+    return model
 
-        
-    else:
-        raise NotImplementedError(f'The model {model_name} has not been implemented in models.py, check if you got the name right.')
 
 
 
