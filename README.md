@@ -1,4 +1,4 @@
-# A .py script implementing an MLP classifier on the MNIST dataset implemented in JAX with a GUI for entering hyperparameters.
+# MLP classifier on the MNIST dataset implemented in JAX with a GUI for entering hyperparameters.
 
 ## Summary
 
