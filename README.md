@@ -35,3 +35,9 @@ For now let's say we want to train the model named 'mlp_small'.
 ```tensorboard --logdir results/mlp_small```. Follow the link to open the interface. Go to the HPARAMS tab and you'll see a list of runs with different hyperparameters. Click on the desired one to view the training plots of training loss, training accuracy, test loss, and test accuracy. 
 
 This feature is not offered by default through the SummaryWriter class of PyTorch tensorboard. But I have subclassed it in SummaryWriter_mod.py and then added a function called add_hparams_plot that allows me to offer this visualization.
+
+## License and copyright
+&copy; Sourav Sarkar
+
+Licensed under the [MIT License](LICENSE)  
+
